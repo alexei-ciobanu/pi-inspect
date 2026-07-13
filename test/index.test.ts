@@ -99,7 +99,11 @@ describe("clipboard selection", () => {
 describe("extension registration", () => {
 	it("registers inspect commands without adding tools or prompt hooks", () => {
 		const commands: string[] = [];
+		const events: string[] = [];
 		const api = {
+			on(name: string) {
+				events.push(name);
+			},
 			registerCommand(name: string) {
 				commands.push(name);
 			},
@@ -107,5 +111,40 @@ describe("extension registration", () => {
 
 		registerInspectExtension(api);
 		expect(commands).toEqual(["inspect", "system-prompt", "tool-result"]);
+		expect(events).toEqual(["session_start", "agent_start"]);
+	});
+
+	it("uses the prompt captured after before-agent-start extensions", async () => {
+		type Handler = (event: unknown, context: unknown) => unknown;
+		const events = new Map<string, Handler>();
+		const commands = new Map<string, { handler: (arguments_: string, context: unknown) => Promise<void> }>();
+		const api = {
+			on(name: string, handler: Handler) {
+				events.set(name, handler);
+			},
+			registerCommand(name: string, options: { handler: (arguments_: string, context: unknown) => Promise<void> }) {
+				commands.set(name, options);
+			},
+		} as unknown as ExtensionAPI;
+		let viewed = "";
+		const baseContext = {
+			waitForIdle: async () => undefined,
+			getSystemPrompt: () => "BASE",
+			hasUI: true,
+			ui: {
+				notify: () => undefined,
+				editor: async (_title: string, text: string) => {
+					viewed = text;
+					return undefined;
+				},
+			},
+		};
+
+		registerInspectExtension(api);
+		events.get("session_start")?.({}, baseContext);
+		events.get("agent_start")?.({}, { ...baseContext, getSystemPrompt: () => "BASE\n\nAUTO MEMORY" });
+		await commands.get("inspect")?.handler("prompt", baseContext);
+
+		expect(viewed).toBe("BASE\n\nAUTO MEMORY");
 	});
 });

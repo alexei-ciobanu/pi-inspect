@@ -1,5 +1,11 @@
 import { spawn } from "node:child_process";
-import type { ExtensionAPI, ExtensionCommandContext, ToolInfo } from "@earendil-works/pi-coding-agent";
+import {
+	DynamicBorder,
+	type ExtensionAPI,
+	type ExtensionCommandContext,
+	type ToolInfo,
+} from "@earendil-works/pi-coding-agent";
+import { Container, type SelectItem, SelectList, Text } from "@earendil-works/pi-tui";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -290,8 +296,8 @@ async function inspectResult(action: string, ctx: ExtensionCommandContext): Prom
 
 async function inspectResults(ctx: ExtensionCommandContext): Promise<void> {
 	await ctx.waitForIdle();
-	if (!ctx.hasUI) {
-		ctx.ui.notify("Selecting tool results requires UI mode.", "error");
+	if (ctx.mode !== "tui") {
+		ctx.ui.notify("Selecting tool results requires TUI mode.", "error");
 		return;
 	}
 	const exchanges = exchangesFromContext(ctx);
@@ -299,14 +305,50 @@ async function inspectResults(ctx: ExtensionCommandContext): Promise<void> {
 		ctx.ui.notify("No completed tool exchanges exist on the active session branch.", "warning");
 		return;
 	}
-	const recent = exchanges.slice(-100).reverse();
-	const labels = recent.map(
-		(exchange, index) => `${String(index + 1).padStart(2, " ")}  ${exchange.toolName}  ${exchange.toolCallId}`,
-	);
-	const selected = await ctx.ui.select("Select a completed tool exchange", labels);
-	if (!selected) return;
-	const index = labels.indexOf(selected);
-	const exchange = index >= 0 ? recent[index] : undefined;
+	const recent = [...exchanges].reverse();
+	const items: SelectItem[] = recent.map((exchange, index) => ({
+		value: String(index),
+		label: exchange.toolName,
+		description: `${stringify(exchange.arguments).replace(/\s+/g, " ")} · ${exchange.toolCallId}`,
+	}));
+	const selected = await ctx.ui.custom<string | null>((tui, theme, _keybindings, done) => {
+		const container = new Container();
+		container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+		container.addChild(new Text(theme.fg("accent", theme.bold("Completed tool exchanges")), 1, 0));
+		const list = new SelectList(items, Math.min(items.length, 14), {
+			selectedPrefix: (text) => theme.fg("accent", text),
+			selectedText: (text) => theme.fg("accent", text),
+			description: (text) => theme.fg("muted", text),
+			scrollInfo: (text) => theme.fg("dim", text),
+			noMatch: (text) => theme.fg("warning", text),
+		});
+		list.onSelect = (item) => done(item.value);
+		list.onCancel = () => done(null);
+		container.addChild(list);
+		container.addChild(new Text(theme.fg("dim", "↑↓ navigate • enter inspect • c copy • esc cancel"), 1, 0));
+		container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+
+		return {
+			render: (width) => container.render(width),
+			invalidate: () => container.invalidate(),
+			handleInput: (data) => {
+				if (data === "c") {
+					const item = list.getSelectedItem();
+					const exchange = item ? recent[Number(item.value)] : undefined;
+					if (exchange) {
+						void copyToClipboard(formatToolExchange(exchange))
+							.then((command) => ctx.ui.notify(`Copied ${exchange.toolName} exchange with ${command}`, "info"))
+							.catch((error) => ctx.ui.notify(`Could not copy to clipboard: ${String(error)}`, "error"));
+					}
+					return;
+				}
+				list.handleInput(data);
+				tui.requestRender();
+			},
+		};
+	});
+	if (selected === null || selected === undefined) return;
+	const exchange = recent[Number(selected)];
 	if (!exchange) return;
 	await showOrCopy(formatToolExchange(exchange), `Tool result: ${exchange.toolName}`, "show", ctx);
 }
@@ -338,6 +380,17 @@ const HELP = `pi-inspect commands:
 /inspect tools               Inspect configured tool metadata and schemas`;
 
 export function registerInspectExtension(pi: ExtensionAPI): void {
+	let latestAssembledPrompt: string | undefined;
+
+	pi.on("session_start", () => {
+		latestAssembledPrompt = undefined;
+	});
+
+	// agent_start runs after every before_agent_start handler, so this captures the final chained Pi prompt.
+	pi.on("agent_start", (_event, ctx) => {
+		latestAssembledPrompt = ctx.getSystemPrompt();
+	});
+
 	pi.registerCommand("inspect", {
 		description: "Inspect the system prompt, tools, or finalized tool exchanges",
 		getArgumentCompletions: (prefix) => {
@@ -350,7 +403,13 @@ export function registerInspectExtension(pi: ExtensionAPI): void {
 			switch (subject) {
 				case "prompt":
 					await ctx.waitForIdle();
-					await showOrCopy(ctx.getSystemPrompt(), "Current system prompt", action, ctx);
+					if (!latestAssembledPrompt) {
+						ctx.ui.notify(
+							"No agent turn has assembled the prompt since this session started; showing Pi's base prompt.",
+							"warning",
+						);
+					}
+					await showOrCopy(latestAssembledPrompt ?? ctx.getSystemPrompt(), "Current system prompt", action, ctx);
 					return;
 				case "result":
 					await inspectResult(action, ctx);
@@ -371,7 +430,18 @@ export function registerInspectExtension(pi: ExtensionAPI): void {
 		description: "Inspect or copy the current effective system prompt",
 		handler: async (action, ctx) => {
 			await ctx.waitForIdle();
-			await showOrCopy(ctx.getSystemPrompt(), "Current system prompt", action.trim().toLowerCase() || "show", ctx);
+			if (!latestAssembledPrompt) {
+				ctx.ui.notify(
+					"No agent turn has assembled the prompt since this session started; showing Pi's base prompt.",
+					"warning",
+				);
+			}
+			await showOrCopy(
+				latestAssembledPrompt ?? ctx.getSystemPrompt(),
+				"Current system prompt",
+				action.trim().toLowerCase() || "show",
+				ctx,
+			);
 		},
 	});
 

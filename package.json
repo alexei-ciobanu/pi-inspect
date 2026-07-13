@@ -29,11 +29,13 @@
 		"check": "tsc --noEmit && biome check . && vitest run"
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-coding-agent": "*"
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.2",
 		"@earendil-works/pi-coding-agent": "^0.80.6",
+		"@earendil-works/pi-tui": "^0.80.6",
 		"@types/node": "^24.0.0",
 		"typescript": "^6.0.0",
 		"vitest": "^4.0.0"

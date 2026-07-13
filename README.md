@@ -20,6 +20,10 @@ Aliases:
 
 `show` opens Pi's multiline editor as a convenient scrollable viewer; any edits are discarded. `copy` uses the native clipboard command available on macOS, Windows, WSL, Linux, or Termux.
 
+The `/inspect results` selector is height-bounded and scrollable regardless of transcript length. Press `c` to copy the selected exchange without leaving the selector, or Enter to inspect it.
+
+Pi assembles per-turn prompt additions in `before_agent_start`. `pi-inspect` snapshots the final chained prompt at `agent_start`, after those handlers have run, so prompt inspection includes additions such as `pi-auto-memory`. Immediately after a reload or session switch, send one normal agent message before inspecting the prompt; until then only Pi's base prompt exists and the command displays a warning.
+
 Tool exchanges are reconstructed from the active session branch. The report pairs the parsed tool call persisted in the assistant message with the finalized tool-result message after tool-result hooks and message-end replacements. It also shows the compact arguments JSON and the text-result string formed by joining text blocks with a newline, as Pi's standard provider serializers do. Tool `details` are shown separately because they are Pi metadata and are not sent to the model.
 
 Pi stores parsed tool arguments rather than the provider's original lexical JSON stream. The report is therefore semantically exact, but inconsequential whitespace from the provider's raw JSON is not available. Provider serialization can additionally normalize IDs, sanitize invalid Unicode surrogates, and encode images differently; the persisted Pi message is shown so those distinctions remain explicit.

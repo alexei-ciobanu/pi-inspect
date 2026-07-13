@@ -18,7 +18,7 @@ Aliases:
 /tool-result [show|copy]
 ```
 
-`show` opens Pi's multiline editor as a convenient scrollable viewer; any edits are discarded. `copy` uses the native clipboard command available on macOS, Windows, WSL, Linux, or Termux.
+`show` opens Pi's multiline editor as a convenient scrollable viewer; any edits are discarded. `copy` uses the native clipboard command available on macOS, Windows, WSL, Linux, or Termux. WSL and Windows clipboard input is explicitly decoded as UTF-8 so punctuation and other non-ASCII text survive intact.
 
 The `/inspect results` selector is height-bounded and scrollable regardless of transcript length. Press `c` to copy the selected exchange without leaving the selector, or Enter to inspect it.
 

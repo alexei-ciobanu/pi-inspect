@@ -89,9 +89,10 @@ describe("clipboard selection", () => {
 		expect(clipboardCommands("android", {})).toEqual([{ command: "termux-clipboard-set", args: [] }]);
 	});
 
-	it("prefers clip.exe under WSL and retains Linux fallbacks", () => {
+	it("prefers an explicitly UTF-8 PowerShell clipboard under WSL and retains Linux fallbacks", () => {
 		const commands = clipboardCommands("linux", { WSL_DISTRO_NAME: "Ubuntu" });
-		expect(commands[0]).toEqual({ command: "clip.exe", args: [] });
+		expect(commands[0]?.command).toBe("powershell.exe");
+		expect(commands[0]?.args.join(" ")).toContain("InputEncoding");
 		expect(commands).toContainEqual({ command: "xsel", args: ["--clipboard", "--input"] });
 	});
 });

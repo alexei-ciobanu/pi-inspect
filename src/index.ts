@@ -23,6 +23,13 @@ export interface ClipboardCommand {
 	args: string[];
 }
 
+const POWERSHELL_UTF8_CLIPBOARD_ARGS = [
+	"-NoProfile",
+	"-NonInteractive",
+	"-Command",
+	"[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false); Set-Clipboard -Value ([Console]::In.ReadToEnd())",
+];
+
 function isRecord(value: unknown): value is UnknownRecord {
 	return typeof value === "object" && value !== null;
 }
@@ -196,19 +203,20 @@ export function clipboardCommands(
 	environment: NodeJS.ProcessEnv = process.env,
 ): ClipboardCommand[] {
 	if (platform === "darwin") return [{ command: "pbcopy", args: [] }];
-	if (platform === "win32") return [{ command: "clip", args: [] }];
+	if (platform === "win32") return [{ command: "powershell.exe", args: POWERSHELL_UTF8_CLIPBOARD_ARGS }];
 	if (platform === "android" || environment["TERMUX_VERSION"]) {
 		return [{ command: "termux-clipboard-set", args: [] }];
 	}
 
 	const commands: ClipboardCommand[] = [];
-	if (environment["WSL_DISTRO_NAME"] || environment["WSL_INTEROP"]) commands.push({ command: "clip.exe", args: [] });
+	if (environment["WSL_DISTRO_NAME"] || environment["WSL_INTEROP"]) {
+		commands.push({ command: "powershell.exe", args: POWERSHELL_UTF8_CLIPBOARD_ARGS });
+	}
 	if (environment["WAYLAND_DISPLAY"]) commands.push({ command: "wl-copy", args: [] });
 	commands.push(
 		{ command: "xclip", args: ["-selection", "clipboard"] },
 		{ command: "xsel", args: ["--clipboard", "--input"] },
 		{ command: "wl-copy", args: [] },
-		{ command: "clip.exe", args: [] },
 	);
 	return commands;
 }

@@ -211,12 +211,21 @@ async function pipeToCommand(candidate: ClipboardCommand, text: string): Promise
 	await new Promise<void>((resolve, reject) => {
 		const child = spawn(candidate.command, candidate.args, { stdio: ["pipe", "ignore", "pipe"] });
 		let stderr = "";
+		let settled = false;
+		const fail = (error: unknown): void => {
+			if (settled) return;
+			settled = true;
+			reject(error);
+		};
 		child.stderr?.setEncoding("utf8");
 		child.stderr?.on("data", (chunk: string) => {
 			stderr += chunk;
 		});
-		child.on("error", reject);
+		child.on("error", fail);
+		child.stdin?.on("error", fail);
 		child.on("close", (code) => {
+			if (settled) return;
+			settled = true;
 			if (code === 0) resolve();
 			else reject(new Error(stderr.trim() || `${candidate.command} exited with code ${String(code)}`));
 		});
